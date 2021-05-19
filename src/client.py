@@ -1,8 +1,6 @@
 import io
 import os
 import zipfile
-from dataclasses import dataclass
-from datetime import datetime
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qs
 
@@ -16,23 +14,6 @@ try:
     QUALTRICS_TOKEN = os.environ['QUALTRICS_TOKEN']
 except KeyError as e:
     raise MissingApiTokenError("Tried accessing APi token that does not exist")
-
-
-@dataclass
-class QualtricsSurvey:
-    name: str
-    survey_id: str
-    last_modified: datetime
-    active: bool
-
-
-def parse_survey(survey: Dict[str, Any]) -> QualtricsSurvey:
-    return QualtricsSurvey(
-        name=survey['name'],
-        survey_id=survey['id'],
-        last_modified=datetime.strptime(survey['lastModified'], '%Y-%m-%dT%H:%M:%SZ'),
-        active=survey['isActive'],
-    )
 
 
 class BaseClient:
@@ -87,6 +68,26 @@ class BaseClient:
         self.stream = stream
         self.session = self._get_session()
 
+    def __enter__(self):
+        """Returns class object for context manager.
+        Returns
+        -------
+        class:`Client`
+            A client.
+
+        """
+        return self
+
+    def __exit__(self, *args):
+        """Closes the session adapters.
+        Returns
+        -------
+            None
+
+        """
+        self.session.__exit__(*args)
+        self.session = None
+
     def __str__(self):
         """Return name of Client() class for users.
         Returns
@@ -106,13 +107,6 @@ class BaseClient:
 
         """
         return f'{self.__class__.__name__}()'
-
-    def __enter__(self):
-        self.session.__enter__()
-        return self
-
-    def __exit__(self, *args):
-        self.session.__exit__(*args)
 
     @property
     def base_url(self) -> str:
@@ -164,6 +158,7 @@ class BaseClient:
         -------
         class:`requests.Response`
             Response object of requests library.
+
         """
         try:
             response = self.session.request(method, url, timeout=self.timeout, **kwargs)
@@ -183,9 +178,9 @@ class BaseClient:
 
 
 class QualtricsResponseExportClient(BaseClient):
-    FILE_EXTENSION = ['csv', 'tsv', 'xml', 'spss']
+    FILE_EXTENSION = ['csv', 'tsv', 'json', 'xml', 'ndjson', 'json', 'spss']
 
-    def get_all_filters(self, survey_id: str) -> requests.Response:
+    def get_available_filters(self, survey_id: str) -> requests.Response:
         """Get all filters for survey.
         Parameters
         ----------
@@ -195,12 +190,31 @@ class QualtricsResponseExportClient(BaseClient):
         -------
         class:`requests.Response`
             Response object of requests library.
+
         """
         service_url = f'/surveys/{survey_id}/filters'
         full_url = self.base_url + service_url
         return self._make_request(method='GET', url=full_url)
 
-    def export_survey(self, survey_id: str, file_format: str, filter_id: str = None):
+    def start_response_export(self, survey_id: str, file_format: str, filter_id: str = None,
+                              body: Dict = None) -> requests.Response:
+        """Starts an export of a survey's responses.
+        Parameters
+        ----------
+        survey_id: str
+             The id for the survey.
+        file_format: str
+            The file format for data export.
+        filter_id: str
+            The survey filter id.
+        body: dict
+            Optional fields to modify the export.
+        Returns
+        -------
+        class:`requests.Response`
+            Response object of requests library.
+
+        """
         service_url = f"surveys/{survey_id}/export-responses/"
         full_url = self.base_url + service_url
 
@@ -211,8 +225,25 @@ class QualtricsResponseExportClient(BaseClient):
         if filter_id is not None:
             data['filterId'] = filter_id
 
-        response = self._make_request('POST', url=full_url, json=data)
-        progress_id = response.json()["result"]["progressId"]
+        if body is not None:
+            data.update((key, value) for key, value in body.items() if key not in data)
+
+        return self._make_request('POST', url=full_url, json=data)
+
+    def get_response_export_progress(self):
+        pass
+
+    def get_response_export_file(self):
+        pass
+
+    def export_survey(self, survey_id: str, file_format: str, filter_id: str = None, *args, **kwargs):
+
+        export_response = self.start_response_export(survey_id, file_format, filter_id)
+        progress_id = export_response.json()["result"]["progressId"]
+
+        # Get Response Export Progress
+        service_url = f"surveys/{survey_id}/export-responses/"
+        full_url = self.base_url + service_url
 
         check_response = None
         progress_status = "inProgress"
@@ -226,6 +257,7 @@ class QualtricsResponseExportClient(BaseClient):
             if "failed" in progress_status:
                 raise ExportFailureError("Export failed")
 
+        # Get Response Export File
         if check_response:
             file_id = check_response.json()["result"]["fileId"]
             download_url = full_url + file_id + '/file'
