@@ -9,6 +9,8 @@ from requests import HTTPError, Timeout
 from requests.adapters import HTTPAdapter
 
 from src.exceptions import MissingApiTokenError, ExportFailureError
+from src.constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION
+
 
 try:
     QUALTRICS_TOKEN = os.environ['QUALTRICS_TOKEN']
@@ -30,8 +32,6 @@ class BaseClient:
     token
     data_center
     """
-
-    __data_centers__ = ['fra1', 'ca1', 'iad1', 'sjc1', 'syd1', 'gov1']
 
     def __init__(
             self,
@@ -58,7 +58,7 @@ class BaseClient:
         None
         """
 
-        if data_center not in self.__data_centers__:
+        if data_center not in DATA_CENTERS:
             raise ValueError(f'{data_center} not a valid datacenter.')
 
         self.token = token
@@ -67,6 +67,17 @@ class BaseClient:
         self.timeout = timeout
         self.stream = stream
         self.session = self._get_session()
+
+    @property
+    def base_url(self) -> str:
+        """Return URL endpoint client is connected to.
+        Returns
+        -------
+            str
+                URL for the endpoint.
+
+        """
+        return BASE_URL.format(self.data_center)
 
     def __enter__(self):
         """Returns class object for context manager.
@@ -107,17 +118,6 @@ class BaseClient:
 
         """
         return f'{self.__class__.__name__}()'
-
-    @property
-    def base_url(self) -> str:
-        """Return URL endpoint client is connected to.
-        Returns
-        -------
-            str
-                URL for the endpoint.
-
-        """
-        return f'https://{self.data_center}.qualtrics.com/API/v3/'
 
     def _get_session(self) -> requests.Session:
         """Return session that client uses for connecting to endpoint.
@@ -165,7 +165,7 @@ class BaseClient:
             response.raise_for_status()
         except HTTPError as http_error:
             error_msg = http_error.response.json()['meta']['error']['errorMessage']
-            raise HTTPError(f'HTTP error occurred. {error_msg}')
+            raise HTTPError(f'HTTP error occurred. {error_msg}') from http_error
         except ConnectionError as connection_error:
             raise ConnectionError(f'Could not establish connection to: {self.base_url}. Reason {connection_error}')
         except Timeout:
@@ -178,7 +178,6 @@ class BaseClient:
 
 
 class QualtricsResponseExportClient(BaseClient):
-    FILE_EXTENSION = ['csv', 'tsv', 'json', 'xml', 'ndjson', 'json', 'spss']
 
     def get_available_filters(self, survey_id: str) -> requests.Response:
         """Get all filters for survey.
@@ -218,7 +217,7 @@ class QualtricsResponseExportClient(BaseClient):
         service_url = f"surveys/{survey_id}/export-responses/"
         full_url = self.base_url + service_url
 
-        if file_format not in self.FILE_EXTENSION:
+        if file_format not in FILE_EXTENSION:
             raise ValueError('Unsupported file format')
 
         data = {'format': file_format}
