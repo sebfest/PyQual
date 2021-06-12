@@ -167,9 +167,9 @@ class BaseClient:
             error_msg = http_error.response.json()['meta']['error']['errorMessage']
             raise HTTPError(f'HTTP error occurred. {error_msg}') from http_error
         except ConnectionError as connection_error:
-            raise ConnectionError(f'Could not establish connection to: {self.base_url}. Reason {connection_error}')
-        except Timeout:
-            print('The request timed out')
+            raise ConnectionError(f'Could not establish connection to {url}. Reason {connection_error}')
+        except Timeout as timeout_error :
+            raise Timeout(f'Failed to receive response from {url}. Reason {timeout_error}')
         except Exception as error:
             print(f'An unknown error occurred: {error}')
             raise
@@ -312,12 +312,12 @@ class QualtricsManageSurveyClient(BaseClient):
 
 if __name__ == "__main__":
     with QualtricsResponseExportClient(data_center='fra1') as test_client:
-        test_response = test_client.get_all_filters('SV_9pERKR4iuhFTYIB')
-        test_client.export_survey(
-            survey_id='test',
-            file_format='csv',
-            filter_id='ac6b4fd9-98c8-4000-81b3-533d1297ce95'
-        )
+        test_response = test_client.get_available_filters('SV_9pERKR4iuhFTYIB')
+        #test_client.export_survey(
+        #    survey_id='test',
+        #    file_format='csv',
+        #    filter_id='ac6b4fd9-98c8-4000-81b3-533d1297ce95'
+        #)
 
         # test_client.export_survey('SV_ePD98UE1FgyMRKJ', 'csv')
         # test_survey = QualtricsSurvey(name='test', survey_id='SV_5hy1gOZg63LND2B', active=True, last_modified=datetime.today())
