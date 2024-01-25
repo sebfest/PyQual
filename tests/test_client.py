@@ -2,8 +2,8 @@ import random
 from unittest import TestCase, main, mock
 from requests.exceptions import Timeout, HTTPError
 
-from src.client import BaseClient, QualtricsResponseExportClient
-from constants import DATA_CENTERS, BASE_URL
+from pyqual.client import BaseClient, QualtricsResponseExportClient
+from pyqual.constants import DATA_CENTERS, BASE_URL
 
 
 class BaseClientTestCase(TestCase):

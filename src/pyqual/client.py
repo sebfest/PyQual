@@ -8,8 +8,8 @@ import requests
 from requests import HTTPError, Timeout
 from requests.adapters import HTTPAdapter
 
-from src.exceptions import MissingApiTokenError, ExportFailureError
-from src.constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION
+from exceptions import MissingApiTokenError, ExportFailureError
+from constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION
 
 
 try:
@@ -279,7 +279,7 @@ class QualtricsManageSurveyClient(BaseClient):
         while next_page := json_response['result']['nextPage']:
             parsed_url = urlparse(next_page)
             query_strings = parse_qs(parsed_url.query)
-            offset = query_strings.get(b'offset')[0]
+            offset = query_strings.get('offset').pop()
 
             response = self._make_request(method='GET', url=full_url, params={'offset': offset})
             json_response = response.json()
@@ -311,8 +311,8 @@ class QualtricsManageSurveyClient(BaseClient):
 
 
 if __name__ == "__main__":
-    with QualtricsResponseExportClient(data_center='fra1') as test_client:
-        test_response = test_client.get_available_filters('SV_9pERKR4iuhFTYIB')
+    with QualtricsManageSurveyClient(data_center='fra1') as test_client:
+        #test_response = test_client.get_available_filters('SV_9pERKR4iuhFTYIB')
         #test_client.export_survey(
         #    survey_id='test',
         #    file_format='csv',
@@ -322,4 +322,4 @@ if __name__ == "__main__":
         # test_client.export_survey('SV_ePD98UE1FgyMRKJ', 'csv')
         # test_survey = QualtricsSurvey(name='test', survey_id='SV_5hy1gOZg63LND2B', active=True, last_modified=datetime.today())
         # test_client.deactivate_survey(test_survey)
-        # result = test_client.get_all_surveys()
+        result = test_client.get_all_surveys()
