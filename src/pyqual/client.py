@@ -8,14 +8,14 @@ import requests
 from requests import HTTPError, Timeout
 from requests.adapters import HTTPAdapter
 
-from exceptions import MissingApiTokenError, ExportFailureError
-from constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION
-
+from pyqual.exceptions import MissingApiTokenError, ExportFailureError
+from pyqual.constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION
+from pyqual.utils import parse_survey
 
 try:
     QUALTRICS_TOKEN = os.environ['QUALTRICS_TOKEN']
 except KeyError as e:
-    raise MissingApiTokenError("Tried accessing APi token that does not exist")
+    raise MissingApiTokenError("The QUALTRICS_TOKEN environment variable is not defined.")
 
 
 class BaseClient:
@@ -268,26 +268,37 @@ class QualtricsResponseExportClient(BaseClient):
 
 class QualtricsManageSurveyClient(BaseClient):
 
-    def get_all_surveys(self) -> List[Dict[str, Any]]:
+    def get_all_surveys(self, offset_limit: int = 500) -> List[Dict[str, Any]]:
+        survey_list = []
         service_url = "surveys"
         full_url = self.base_url + service_url
 
         response = self._make_request(method='GET', url=full_url)
         json_response = response.json()
-        survey_list = json_response['result']['elements']
+
+        surveys = [parse_survey(survey) for survey in json_response['result']['elements']]
+        survey_list.extend(surveys)
 
         while next_page := json_response['result']['nextPage']:
             parsed_url = urlparse(next_page)
             query_strings = parse_qs(parsed_url.query)
             offset = query_strings.get('offset').pop()
+            page = int(offset) // 100
 
+            if int(offset) >= offset_limit:
+                break
+
+            print(f'Downloading page {page}.')
             response = self._make_request(method='GET', url=full_url, params={'offset': offset})
             json_response = response.json()
-            survey_list.extend(json_response['result']['elements'])
+
+            surveys = [parse_survey(survey) for survey in json_response['result']['elements']]
+            survey_list.extend(surveys)
 
         return survey_list
 
     def get_survey(self, survey_id: str) -> requests.Response:
+        print(f'Downloading survey with id {survey_id}.')
         service_url = f"surveys/{survey_id}"
         full_url = self.base_url + service_url
         return self._make_request(method='GET', url=full_url)
@@ -296,9 +307,10 @@ class QualtricsManageSurveyClient(BaseClient):
         service_url = f"surveys/{survey_id}"
         full_url = self.base_url + service_url
         data = {"isActive": False}
+        print(f'Deactivating survey {survey_id}')
         response = self._make_request('PUT', url=full_url, json=data)
         if response.status_code == requests.codes.ok:
-            print('Survey deactivated')
+            print('Survey deactivated.')
         return response
 
     def get_dir(self) -> requests.Response:
@@ -308,18 +320,3 @@ class QualtricsManageSurveyClient(BaseClient):
 
     def delete_survey(self):
         pass
-
-
-if __name__ == "__main__":
-    with QualtricsManageSurveyClient(data_center='fra1') as test_client:
-        #test_response = test_client.get_available_filters('SV_9pERKR4iuhFTYIB')
-        #test_client.export_survey(
-        #    survey_id='test',
-        #    file_format='csv',
-        #    filter_id='ac6b4fd9-98c8-4000-81b3-533d1297ce95'
-        #)
-
-        # test_client.export_survey('SV_ePD98UE1FgyMRKJ', 'csv')
-        # test_survey = QualtricsSurvey(name='test', survey_id='SV_5hy1gOZg63LND2B', active=True, last_modified=datetime.today())
-        # test_client.deactivate_survey(test_survey)
-        result = test_client.get_all_surveys()
