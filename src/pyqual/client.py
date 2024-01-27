@@ -8,14 +8,13 @@ import requests
 from requests import HTTPError, Timeout
 from requests.adapters import HTTPAdapter
 
+from pyqual.constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION, PAGE_SIZE
 from pyqual.exceptions import MissingApiTokenError, ExportFailureError
-from pyqual.constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION
-from pyqual.utils import parse_survey
 
 try:
     QUALTRICS_TOKEN = os.environ['QUALTRICS_TOKEN']
-except KeyError as e:
-    raise MissingApiTokenError("The QUALTRICS_TOKEN environment variable is not defined.")
+except KeyError:
+    raise MissingApiTokenError("the QUALTRICS_TOKEN environment variable is missing")
 
 
 class BaseClient:
@@ -59,7 +58,7 @@ class BaseClient:
         """
 
         if data_center not in DATA_CENTERS:
-            raise ValueError(f'{data_center} not a valid datacenter.')
+            raise ValueError(f'{data_center} not a valid datacenter')
 
         self.token = token
         self.data_center = data_center
@@ -168,7 +167,7 @@ class BaseClient:
             raise HTTPError(f'HTTP error occurred. {error_msg}') from http_error
         except ConnectionError as connection_error:
             raise ConnectionError(f'Could not establish connection to {url}. Reason {connection_error}')
-        except Timeout as timeout_error :
+        except Timeout as timeout_error:
             raise Timeout(f'Failed to receive response from {url}. Reason {timeout_error}')
         except Exception as error:
             print(f'An unknown error occurred: {error}')
@@ -268,31 +267,33 @@ class QualtricsResponseExportClient(BaseClient):
 
 class QualtricsManageSurveyClient(BaseClient):
 
-    def get_all_surveys(self, offset_limit: int = 500) -> List[Dict[str, Any]]:
-        survey_list = []
+    def get_all_surveys(self, limit: int = 500) -> List[Dict[str, Any]]:
         service_url = "surveys"
         full_url = self.base_url + service_url
 
+        print(f'Downloading page 1.')
         response = self._make_request(method='GET', url=full_url)
         json_response = response.json()
 
-        surveys = [parse_survey(survey) for survey in json_response['result']['elements']]
+        survey_list = []
+        surveys = [survey for survey in json_response['result']['elements']]
         survey_list.extend(surveys)
 
         while next_page := json_response['result']['nextPage']:
             parsed_url = urlparse(next_page)
             query_strings = parse_qs(parsed_url.query)
-            offset = query_strings.get('offset').pop()
-            page = int(offset) // 100
 
-            if int(offset) >= offset_limit:
+            offset = int(query_strings.get('offset').pop())
+            if offset > limit:
                 break
 
+            page = (offset // PAGE_SIZE) + 1
             print(f'Downloading page {page}.')
+
             response = self._make_request(method='GET', url=full_url, params={'offset': offset})
             json_response = response.json()
 
-            surveys = [parse_survey(survey) for survey in json_response['result']['elements']]
+            surveys = [survey for survey in json_response['result']['elements']]
             survey_list.extend(surveys)
 
         return survey_list
