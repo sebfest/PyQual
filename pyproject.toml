@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=62.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyqual"
+version = "0.0.1"
+authors = [
+    { name = "Sebastian Fest", email = "sebsatian.fest@gmail.com" },
+]
+description = "A simple client for Qualtrics."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["Qualtrics", "Client"]
+license = { text = "MIT License" }
+classifiers = [
+    'Development Status :: 1 - Planning',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: MIT License',
+    'Operating System :: POSIX :: Linux',
+    'Programming Language :: Python :: 3.11',
+]
+dependencies = [
+    "requests>=2.31.0",
+]
