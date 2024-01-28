@@ -299,7 +299,6 @@ class QualtricsManageSurveyClient(BaseClient):
         return survey_list
 
     def get_survey(self, survey_id: str) -> requests.Response:
-        print(f'Downloading survey with id {survey_id}.')
         service_url = f"surveys/{survey_id}"
         full_url = self.base_url + service_url
         return self._make_request(method='GET', url=full_url)
