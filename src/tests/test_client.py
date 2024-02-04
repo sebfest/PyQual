@@ -1,5 +1,6 @@
 import random
 from unittest import TestCase, main, mock
+
 from requests.exceptions import Timeout, HTTPError
 
 from pyqual.client import BaseClient, QualtricsResponseExportClient
@@ -11,28 +12,28 @@ class BaseClientTestCase(TestCase):
     def setUp(self):
         self.test_data_center = random.choice(DATA_CENTERS)
         self.invalid_test_data_center = self.test_data_center[:-1]
-        self.client = BaseClient(data_center=self.test_data_center)
+        self.test_token = 'ABCEDEFGH'
+        self.client = BaseClient(token=self.test_token, data_center=self.test_data_center)
 
     def test_init(self):
-
         self.assertIsInstance(self.client, BaseClient)
         self.assertIsNotNone(self.client.token)
 
         with self.assertRaises(ValueError) as context:
-            BaseClient(data_center=self.invalid_test_data_center)
+            BaseClient(self.test_token, data_center=self.invalid_test_data_center)
             self.assertTrue(f'{self.test_data_center} not a valid datacenter.' in context.exception)
 
     def test_client_url(self):
         self.assertEqual(self.client.base_url, BASE_URL.format(self.test_data_center))
 
-    @mock.patch("src.client.requests.Session.request")
+    @mock.patch("pyqual.client.requests.Session.request")
     def test_request_timeout(self, mock_request):
         mock_request.side_effect = Timeout
         with self.assertRaises(Timeout):
             self.client._make_request(method='GET', url='www.test.com')
             mock_request.get.assert_called_once()
 
-    @mock.patch("src.client.requests.Session.request")
+    @mock.patch("pyqual.client.requests.Session.request")
     def test_request_http_error(self, mock_request):
         mock_response = mock.Mock()
         mock_response.status_code = 404
@@ -55,11 +56,11 @@ class BaseClientTestCase(TestCase):
 class QualtricsResponseExportClientTestCase(TestCase):
 
     def setUp(self) -> None:
-        self.client = QualtricsResponseExportClient(data_center=random.choice(DATA_CENTERS))
+        self.test_token = 'ABCEDEFGH'
+        self.client = QualtricsResponseExportClient(token=self.test_token, data_center=random.choice(DATA_CENTERS))
 
-    @mock.patch("src.client.requests.Session.request")
+    @mock.patch("pyqual.client.requests.Session.request")
     def test_get_available_filters(self, mock_request):
-
         mock_response = mock.Mock(status_code=200)
         mock_response.json.return_value = {
             "result": {

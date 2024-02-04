@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 from pyqual.client import QualtricsManageSurveyClient
@@ -16,7 +17,7 @@ class BaseManager:
             _data_center
     """
 
-    def __init__(self, data_center: str = 'fra') -> None:
+    def __init__(self, data_center: str = 'fra1') -> None:
         """Create instance of BaseClient.
             Parameters
             ----------
@@ -27,7 +28,10 @@ class BaseManager:
             None
             """
         self._data_center = data_center
-        self._client = QualtricsManageSurveyClient(data_center=data_center)
+        self._client = QualtricsManageSurveyClient(
+            token=os.environ.get('QUALTRICS_TOKEN'),
+            data_center=self._data_center
+        )
 
     def __repr__(self) -> str:
         """Return printable representation of Client().

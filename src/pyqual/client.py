@@ -1,5 +1,4 @@
 import io
-import os
 import zipfile
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qs
@@ -9,12 +8,7 @@ from requests import HTTPError, Timeout
 from requests.adapters import HTTPAdapter
 
 from pyqual.constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION, PAGE_SIZE
-from pyqual.exceptions import MissingApiTokenError, ExportFailureError
-
-try:
-    QUALTRICS_TOKEN = os.environ['QUALTRICS_TOKEN']
-except KeyError:
-    raise MissingApiTokenError("the QUALTRICS_TOKEN environment variable is missing")
+from pyqual.exceptions import ExportFailureError
 
 
 class BaseClient:
@@ -34,8 +28,8 @@ class BaseClient:
 
     def __init__(
             self,
-            token: str = QUALTRICS_TOKEN,
-            data_center: str = '',
+            token: str,
+            data_center: str,
             retry: int = 3,
             timeout: int = 10,
             stream: bool = True,
