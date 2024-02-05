@@ -8,6 +8,11 @@ class MissingApiTokenError(Exception):
     pass
 
 
+class InvalidDataCenterError(Exception):
+    """Is raised when qualtrics datacenter is wrong."""
+    pass
+
+
 class ExportFailureError(Exception):
     """Is raised when export is aborted."""
     pass

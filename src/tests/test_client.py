@@ -1,3 +1,4 @@
+import os
 import random
 from unittest import TestCase, main, mock
 
@@ -5,6 +6,7 @@ from requests.exceptions import Timeout, HTTPError
 
 from pyqual.client import BaseClient, QualtricsResponseExportClient
 from pyqual.constants import DATA_CENTERS, BASE_URL
+from pyqual.exceptions import InvalidDataCenterError
 
 
 class BaseClientTestCase(TestCase):
@@ -17,9 +19,24 @@ class BaseClientTestCase(TestCase):
 
     def test_init(self):
         self.assertIsInstance(self.client, BaseClient)
-        self.assertIsNotNone(self.client.token)
+        self.assertIsInstance(self.client.token, str)
+        self.assertIsInstance(self.client.data_center, str)
+        self.assertIsNotNone(self.client.retry)
+        self.assertIsNotNone(self.client.timeout)
+        self.assertIsNotNone(self.client.stream)
 
-        with self.assertRaises(ValueError) as context:
+    @mock.patch.dict(os.environ, {"QUALTRICS_TOKEN": "ABCDEFG"})
+    def test_init_from_environment(self):
+        BaseClient(data_center=self.test_data_center)
+
+    @mock.patch.dict(os.environ, {"QUALTRICS_TOKEN": "ABCDEFG"})
+    def test_init_from_environment_with_invalid_data_center(self):
+        with self.assertRaises(InvalidDataCenterError) as context:
+            BaseClient(data_center=self.invalid_test_data_center)
+            self.assertTrue(f'{self.test_data_center} not a valid datacenter.' in context.exception)
+
+    def test_invalid_data_center(self):
+        with self.assertRaises(InvalidDataCenterError) as context:
             BaseClient(self.test_token, data_center=self.invalid_test_data_center)
             self.assertTrue(f'{self.test_data_center} not a valid datacenter.' in context.exception)
 

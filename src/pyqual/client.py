@@ -1,4 +1,5 @@
 import io
+import os
 import zipfile
 from typing import List, Dict, Any
 from urllib.parse import urlparse, parse_qs
@@ -8,7 +9,7 @@ from requests import HTTPError, Timeout
 from requests.adapters import HTTPAdapter
 
 from pyqual.constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION, PAGE_SIZE
-from pyqual.exceptions import ExportFailureError
+from pyqual.exceptions import ExportFailureError, MissingApiTokenError, InvalidDataCenterError
 
 
 class BaseClient:
@@ -28,8 +29,8 @@ class BaseClient:
 
     def __init__(
             self,
-            token: str,
-            data_center: str,
+            token: str = '',
+            data_center: str = '',
             retry: int = 3,
             timeout: int = 10,
             stream: bool = True,
@@ -52,7 +53,13 @@ class BaseClient:
         """
 
         if data_center not in DATA_CENTERS:
-            raise ValueError(f'{data_center} not a valid datacenter')
+            raise InvalidDataCenterError(f'{data_center} not a valid datacenter')
+
+        if not token:
+            try:
+                token = os.environ['QUALTRICS_TOKEN']
+            except KeyError:
+                raise MissingApiTokenError("No qualtrics token provided.")
 
         self.token = token
         self.data_center = data_center
