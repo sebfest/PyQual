@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Self
+from typing import Dict
+from typing_extensions import Self
 
 
 @dataclass

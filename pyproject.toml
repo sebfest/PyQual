@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A simple client for Qualtrics."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 keywords = ["Qualtrics", "Client"]
 license = { text = "MIT License" }
 classifiers = [
