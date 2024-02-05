@@ -3,3 +3,12 @@
 *~
 __pycache__/
 *.py[cod]
+
+
+# Packaging artifacts
+pyqual.egg-info
+pyqual.dist-info
+build/
+dist/
+pip-wheel-metadata/
+.eggs
