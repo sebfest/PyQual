@@ -24,3 +24,8 @@ dependencies = [
     "requests>=2.31.0",
     "typing-extensions>=4.9.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "coverage"
+]
