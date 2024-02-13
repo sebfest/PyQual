@@ -1,4 +1,11 @@
 BASE_URL = 'https://{0}.qualtrics.com/API/v3/'
+ENDPOINTS = {
+    'filters': '/surveys/{0}/filters',
+    'export': 'surveys/{0}/export-responses/',
+    'surveys': 'surveys',
+    'get_survey': 'surveys/{0}',
+    'directories': 'directories',
+}
 DATA_CENTERS = [
     'fra1',
     'ca1',

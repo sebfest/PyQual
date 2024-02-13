@@ -8,8 +8,18 @@ import requests
 from requests import HTTPError, Timeout
 from requests.adapters import HTTPAdapter
 
-from pyqual.constants import BASE_URL, DATA_CENTERS, FILE_EXTENSION, PAGE_SIZE
-from pyqual.exceptions import ExportFailureError, MissingApiTokenError, InvalidDataCenterError
+from pyqual.constants import (
+    BASE_URL,
+    ENDPOINTS,
+    DATA_CENTERS,
+    FILE_EXTENSION,
+    PAGE_SIZE
+)
+from pyqual.exceptions import (
+    ExportFailureError,
+    MissingApiTokenError,
+    InvalidDataCenterError, MinimumSurveyCountError,
+)
 
 
 class BaseClient:
@@ -191,7 +201,7 @@ class QualtricsResponseExportClient(BaseClient):
             Response object of requests library.
 
         """
-        service_url = f'/surveys/{survey_id}/filters'
+        service_url = ENDPOINTS.get('filters').format(survey_id)
         full_url = self.base_url + service_url
         return self._make_request(method='GET', url=full_url)
 
@@ -214,7 +224,7 @@ class QualtricsResponseExportClient(BaseClient):
             Response object of requests library.
 
         """
-        service_url = f"surveys/{survey_id}/export-responses/"
+        service_url = ENDPOINTS.get('export').format(survey_id)
         full_url = self.base_url + service_url
 
         if file_format not in FILE_EXTENSION:
@@ -241,7 +251,7 @@ class QualtricsResponseExportClient(BaseClient):
         progress_id = export_response.json()["result"]["progressId"]
 
         # Get Response Export Progress
-        service_url = f"surveys/{survey_id}/export-responses/"
+        service_url = ENDPOINTS.get('export').format(survey_id)
         full_url = self.base_url + service_url
 
         check_response = None
@@ -269,7 +279,10 @@ class QualtricsResponseExportClient(BaseClient):
 class QualtricsManageSurveyClient(BaseClient):
 
     def get_all_surveys(self, limit: int = 500) -> List[Dict[str, Any]]:
-        service_url = "surveys"
+        if limit < 100:
+            raise MinimumSurveyCountError('Limit must be no less than 100')
+
+        service_url = ENDPOINTS.get('surveys')
         full_url = self.base_url + service_url
 
         print(f'Downloading page 1.')
@@ -279,6 +292,9 @@ class QualtricsManageSurveyClient(BaseClient):
         survey_list = []
         surveys = [survey for survey in json_response['result']['elements']]
         survey_list.extend(surveys)
+
+        if limit <= 100:
+            return survey_list
 
         while next_page := json_response['result']['nextPage']:
             parsed_url = urlparse(next_page)
@@ -300,24 +316,36 @@ class QualtricsManageSurveyClient(BaseClient):
         return survey_list
 
     def get_survey(self, survey_id: str) -> requests.Response:
-        service_url = f"surveys/{survey_id}"
+        service_url = ENDPOINTS.get('get_survey').format(survey_id)
         full_url = self.base_url + service_url
         return self._make_request(method='GET', url=full_url)
 
     def deactivate_survey(self, survey_id: str) -> requests.Response:
-        service_url = f"surveys/{survey_id}"
+        service_url = ENDPOINTS.get('get_survey').format(survey_id)
         full_url = self.base_url + service_url
         data = {"isActive": False}
+
         print(f'Deactivating survey {survey_id}')
         response = self._make_request('PUT', url=full_url, json=data)
+
         if response.status_code == requests.codes.ok:
             print('Survey deactivated.')
+
         return response
 
     def get_dir(self) -> requests.Response:
-        service_url = f"directories"
+        service_url = ENDPOINTS.get('directories')
         full_url = self.base_url + service_url
         return self._make_request(method='GET', url=full_url)
 
-    def delete_survey(self):
-        pass
+    def delete_survey(self, survey_id: str) -> requests.Response:
+        service_url = ENDPOINTS.get('get_survey').format(survey_id)
+        full_url = self.base_url + service_url
+
+        print(f'Deleting survey {survey_id}')
+        response = self._make_request('DELETE', url=full_url)
+
+        if response.status_code == requests.codes.ok:
+            print('Survey deactivated.')
+
+        return response

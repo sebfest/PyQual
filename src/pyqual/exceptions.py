@@ -16,3 +16,8 @@ class InvalidDataCenterError(Exception):
 class ExportFailureError(Exception):
     """Is raised when export is aborted."""
     pass
+
+
+class MinimumSurveyCountError(Exception):
+    """Is Raised if Limit for downloaded surveys id too low"""
+    pass
