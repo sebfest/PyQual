@@ -269,6 +269,21 @@ class QualtricsManageSurveyClientTestCase(TestCase):
 
         self.assertEqual(len(surveys), 100)
 
+    @mock.patch("pyqual.client.requests.Session.request")
+    def test_activate_survey(self, mock_request):
+        mock_request.return_value = _response()
+
+        response = self.client.activate_survey("SV_123")
+
+        self.assertEqual(response.status_code, 200)
+        mock_request.assert_called_once_with(
+            'PUT',
+            f'{self.client.base_url}surveys/SV_123',
+            timeout=self.client.timeout,
+            stream=True,
+            json={'isActive': True},
+        )
+
 
 if __name__ == '__main__':
     main()

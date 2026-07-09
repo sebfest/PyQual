@@ -1,6 +1,8 @@
 import os
 from typing import List
 
+import requests
+
 from pyqual.client import QualtricsManageSurveyClient
 from pyqual.models import QualtricsSurvey
 
@@ -62,3 +64,21 @@ class QualtricsManager(BaseManager):
             data = response.json()['result']
 
             return QualtricsSurvey.from_dict(data)
+
+    def deactivate_survey(self, survey_id: str) -> requests.Response:
+        """Deactivate a survey."""
+        with self._client as client:
+            print(f"Deactivating Survey with id {survey_id}")
+            return client.deactivate_survey(survey_id=survey_id)
+
+    def activate_survey(self, survey_id: str) -> requests.Response:
+        """Activate a survey."""
+        with self._client as client:
+            print(f"Activating Survey with id {survey_id}")
+            return client.activate_survey(survey_id=survey_id)
+
+    def delete_survey(self, survey_id: str) -> requests.Response:
+        """Delete a survey."""
+        with self._client as client:
+            print(f"Deleting Survey with id {survey_id}")
+            return client.delete_survey(survey_id=survey_id)

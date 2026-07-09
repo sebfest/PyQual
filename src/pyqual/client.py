@@ -404,6 +404,19 @@ class QualtricsManageSurveyClient(BaseClient):
 
         return response
 
+    def activate_survey(self, survey_id: str) -> requests.Response:
+        service_url = ENDPOINTS.get('get_survey').format(survey_id)
+        full_url = self._build_url(service_url)
+        data = {"isActive": True}
+
+        print(f'Activating survey {survey_id}')
+        response = self._make_request('PUT', url=full_url, json=data)
+
+        if response.status_code == requests.codes.ok:
+            print('Survey activated.')
+
+        return response
+
     def get_dir(self) -> requests.Response:
         service_url = ENDPOINTS.get('directories')
         full_url = self._build_url(service_url)
@@ -417,6 +430,6 @@ class QualtricsManageSurveyClient(BaseClient):
         response = self._make_request('DELETE', url=full_url)
 
         if response.status_code == requests.codes.ok:
-            print('Survey deactivated.')
+            print('Survey deleted.')
 
         return response
