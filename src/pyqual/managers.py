@@ -47,7 +47,7 @@ class BaseManager:
 class QualtricsManager(BaseManager):
 
     def list_surveys(self, limit: int = 300) -> List[QualtricsSurvey]:
-        """List all reviewable HITs from MTurk."""
+        """List surveys available to the configured Qualtrics account."""
         with self._client as client:
             print("Retrieving all Surveys")
             survey_list = client.get_all_surveys(limit=limit)
@@ -61,13 +61,4 @@ class QualtricsManager(BaseManager):
             response = client.get_survey(survey_id=survey_id)
             data = response.json()['result']
 
-            survey = QualtricsSurvey(
-                survey_id=data['id'],
-                name=data['name'],
-                owner_id=data['ownerId'],
-                last_modified=data['lastModifiedDate'],
-                creation_date=data['creationDate'],
-                active=data['isActive'],
-            )
-
-            return survey
+            return QualtricsSurvey.from_dict(data)

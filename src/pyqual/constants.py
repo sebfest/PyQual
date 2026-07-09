@@ -2,6 +2,8 @@ BASE_URL = 'https://{0}.qualtrics.com/API/v3/'
 ENDPOINTS = {
     'filters': '/surveys/{0}/filters',
     'export': 'surveys/{0}/export-responses/',
+    'export_progress': 'surveys/{0}/export-responses/{1}',
+    'export_file': 'surveys/{0}/export-responses/{1}/file',
     'surveys': 'surveys',
     'get_survey': 'surveys/{0}',
     'directories': 'directories',
@@ -20,7 +22,6 @@ FILE_EXTENSION = [
     'json',
     'xml',
     'ndjson',
-    'json',
     'spss'
 ]
 PAGE_SIZE = 100

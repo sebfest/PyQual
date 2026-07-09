@@ -1,12 +1,15 @@
 import io
 import os
+import time
 import zipfile
-from typing import List, Dict, Any
+from pathlib import Path
+from typing import Any, Dict, List
 from urllib.parse import urlparse, parse_qs
 
 import requests
-from requests import HTTPError, Timeout
 from requests.adapters import HTTPAdapter
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import HTTPError, Timeout
 
 from pyqual.constants import (
     BASE_URL,
@@ -18,8 +21,53 @@ from pyqual.constants import (
 from pyqual.exceptions import (
     ExportFailureError,
     MissingApiTokenError,
-    InvalidDataCenterError, MinimumSurveyCountError,
+    InvalidDataCenterError,
+    MinimumSurveyCountError,
 )
+
+
+def _extract_error_message(response: requests.Response | None) -> str:
+    if response is None:
+        return "Unknown HTTP error"
+
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+
+    try:
+        return payload["meta"]["error"]["errorMessage"]
+    except (KeyError, TypeError):
+        pass
+
+    text = getattr(response, "text", "")
+    if isinstance(text, str) and text:
+        return text
+
+    content = getattr(response, "content", "")
+    if isinstance(content, bytes):
+        return content.decode(errors="replace")
+    if isinstance(content, str) and content:
+        return content
+
+    status_code = getattr(response, "status_code", "unknown")
+    return f"HTTP status {status_code}"
+
+
+def _next_page_offset(next_page: str | None) -> int | None:
+    if not next_page or next_page == "null":
+        return None
+
+    parsed_url = urlparse(next_page)
+    query_strings = parse_qs(parsed_url.query)
+    offsets = query_strings.get("offset")
+    if not offsets:
+        return None
+
+    try:
+        return int(offsets[-1])
+    except ValueError:
+        return None
 
 
 class BaseClient:
@@ -40,7 +88,7 @@ class BaseClient:
     def __init__(
             self,
             token: str = '',
-            data_center: str = '',
+            data_center: str = 'fra1',
             retry: int = 3,
             timeout: int = 10,
             stream: bool = True,
@@ -106,8 +154,10 @@ class BaseClient:
             None
 
         """
-        self.session.__exit__(*args)
-        self.session = None
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+        return False
 
     def __str__(self):
         """Return name of Client() class for users.
@@ -139,22 +189,18 @@ class BaseClient:
         """
         session = requests.Session()
 
-        headers = {
-            "x-api-token": self.token,
-            "content-type": None,  # "application/json"
-        }
-
         if self.token:
-            session.headers.update(headers)
+            session.headers.update({"X-API-TOKEN": self.token})
 
         if self.retry > 1:
             adapter = HTTPAdapter(max_retries=self.retry)
             session.mount(self.base_url, adapter)
 
-        if self.stream:
-            session.stream = True
-
         return session
+
+    def _build_url(self, endpoint: str) -> str:
+        """Return a URL under the Qualtrics API base path."""
+        return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
 
     def _make_request(self, method: str, url: str, **kwargs) -> requests.Response:
         """Make a generic request.
@@ -171,18 +217,16 @@ class BaseClient:
 
         """
         try:
+            kwargs.setdefault("stream", self.stream)
             response = self.session.request(method, url, timeout=self.timeout, **kwargs)
             response.raise_for_status()
         except HTTPError as http_error:
-            error_msg = http_error.response.json()['meta']['error']['errorMessage']
+            error_msg = _extract_error_message(http_error.response)
             raise HTTPError(f'HTTP error occurred. {error_msg}') from http_error
-        except ConnectionError as connection_error:
-            raise ConnectionError(f'Could not establish connection to {url}. Reason {connection_error}')
+        except RequestsConnectionError as connection_error:
+            raise RequestsConnectionError(f'Could not establish connection to {url}. Reason {connection_error}')
         except Timeout as timeout_error:
             raise Timeout(f'Failed to receive response from {url}. Reason {timeout_error}')
-        except Exception as error:
-            print(f'An unknown error occurred: {error}')
-            raise
         else:
             return response
 
@@ -202,11 +246,11 @@ class QualtricsResponseExportClient(BaseClient):
 
         """
         service_url = ENDPOINTS.get('filters').format(survey_id)
-        full_url = self.base_url + service_url
+        full_url = self._build_url(service_url)
         return self._make_request(method='GET', url=full_url)
 
     def start_response_export(self, survey_id: str, file_format: str, filter_id: str = None,
-                              body: Dict = None) -> requests.Response:
+                              body: Dict[str, Any] = None) -> requests.Response:
         """Starts an export of a survey's responses.
         Parameters
         ----------
@@ -225,7 +269,7 @@ class QualtricsResponseExportClient(BaseClient):
 
         """
         service_url = ENDPOINTS.get('export').format(survey_id)
-        full_url = self.base_url + service_url
+        full_url = self._build_url(service_url)
 
         if file_format not in FILE_EXTENSION:
             raise ValueError('Unsupported file format')
@@ -239,41 +283,70 @@ class QualtricsResponseExportClient(BaseClient):
 
         return self._make_request('POST', url=full_url, json=data)
 
-    def get_response_export_progress(self):
-        pass
+    def get_response_export_progress(self, survey_id: str, progress_id: str) -> requests.Response:
+        """Get the progress for a response export job."""
+        service_url = ENDPOINTS.get('export_progress').format(survey_id, progress_id)
+        full_url = self._build_url(service_url)
+        return self._make_request('GET', url=full_url)
 
-    def get_response_export_file(self):
-        pass
+    def get_response_export_file(self, survey_id: str, file_id: str) -> requests.Response:
+        """Download the completed response export file."""
+        service_url = ENDPOINTS.get('export_file').format(survey_id, file_id)
+        full_url = self._build_url(service_url)
+        return self._make_request('GET', url=full_url)
 
-    def export_survey(self, survey_id: str, file_format: str, filter_id: str = None, *args, **kwargs):
+    def export_survey(
+            self,
+            survey_id: str,
+            file_format: str,
+            filter_id: str = None,
+            body: Dict[str, Any] = None,
+            output_dir: str | os.PathLike[str] = "MyQualtricsDownload",
+            max_polls: int = 120,
+            poll_interval: float = 1.0,
+    ) -> Path:
 
-        export_response = self.start_response_export(survey_id, file_format, filter_id)
+        export_response = self.start_response_export(survey_id, file_format, filter_id, body=body)
         progress_id = export_response.json()["result"]["progressId"]
 
-        # Get Response Export Progress
-        service_url = ENDPOINTS.get('export').format(survey_id)
-        full_url = self.base_url + service_url
+        for _ in range(max_polls):
+            check_response = self.get_response_export_progress(survey_id, progress_id)
+            result = check_response.json()["result"]
+            progress_status = result["status"]
+            request_progress = result.get("percentComplete")
 
-        check_response = None
-        progress_status = "inProgress"
-        while progress_status != "complete" and progress_status != "failed":
-            check_url = full_url + progress_id
-            check_response = self._make_request('GET', url=check_url)
-            request_progress = check_response.json()["result"]["percentComplete"]
-            print("Download is " + str(request_progress) + "% complete")
-            progress_status = check_response.json()["result"]["status"]
+            if request_progress is not None:
+                print("Download is " + str(request_progress) + "% complete")
 
-            if "failed" in progress_status:
+            if progress_status == "failed":
                 raise ExportFailureError("Export failed")
 
-        # Get Response Export File
-        if check_response:
-            file_id = check_response.json()["result"]["fileId"]
-            download_url = full_url + file_id + '/file'
-            download_response = self._make_request('GET', url=download_url)
+            if progress_status == "complete":
+                file_id = result["fileId"]
+                download_response = self.get_response_export_file(survey_id, file_id)
+                output_path = self._extract_export(download_response.content, output_dir)
+                print('Download complete')
+                return output_path
 
-            zipfile.ZipFile(io.BytesIO(download_response.content)).extractall("MyQualtricsDownload")
-            print('Download complete')
+            time.sleep(poll_interval)
+
+        raise ExportFailureError(f"Export did not complete after {max_polls} checks")
+
+    @staticmethod
+    def _extract_export(content: bytes, output_dir: str | os.PathLike[str]) -> Path:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        root = output_path.resolve()
+
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            for member in archive.infolist():
+                target = (root / member.filename).resolve()
+                if target != root and root not in target.parents:
+                    raise ExportFailureError(f"Unsafe path in export archive: {member.filename}")
+
+            archive.extractall(root)
+
+        return output_path
 
 
 class QualtricsManageSurveyClient(BaseClient):
@@ -283,25 +356,21 @@ class QualtricsManageSurveyClient(BaseClient):
             raise MinimumSurveyCountError('Limit must be no less than 100')
 
         service_url = ENDPOINTS.get('surveys')
-        full_url = self.base_url + service_url
+        full_url = self._build_url(service_url)
 
         print(f'Downloading page 1.')
         response = self._make_request(method='GET', url=full_url)
         json_response = response.json()
 
         survey_list = []
-        surveys = [survey for survey in json_response['result']['elements']]
-        survey_list.extend(surveys)
+        survey_list.extend(json_response['result']['elements'])
 
-        if limit <= 100:
-            return survey_list
+        if len(survey_list) >= limit:
+            return survey_list[:limit]
 
-        while next_page := json_response['result']['nextPage']:
-            parsed_url = urlparse(next_page)
-            query_strings = parse_qs(parsed_url.query)
-
-            offset = int(query_strings.get('offset').pop())
-            if offset > limit:
+        while True:
+            offset = _next_page_offset(json_response['result'].get('nextPage'))
+            if offset is None or offset >= limit:
                 break
 
             page = (offset // PAGE_SIZE) + 1
@@ -310,19 +379,21 @@ class QualtricsManageSurveyClient(BaseClient):
             response = self._make_request(method='GET', url=full_url, params={'offset': offset})
             json_response = response.json()
 
-            surveys = [survey for survey in json_response['result']['elements']]
-            survey_list.extend(surveys)
+            survey_list.extend(json_response['result']['elements'])
+
+            if len(survey_list) >= limit:
+                return survey_list[:limit]
 
         return survey_list
 
     def get_survey(self, survey_id: str) -> requests.Response:
         service_url = ENDPOINTS.get('get_survey').format(survey_id)
-        full_url = self.base_url + service_url
+        full_url = self._build_url(service_url)
         return self._make_request(method='GET', url=full_url)
 
     def deactivate_survey(self, survey_id: str) -> requests.Response:
         service_url = ENDPOINTS.get('get_survey').format(survey_id)
-        full_url = self.base_url + service_url
+        full_url = self._build_url(service_url)
         data = {"isActive": False}
 
         print(f'Deactivating survey {survey_id}')
@@ -335,12 +406,12 @@ class QualtricsManageSurveyClient(BaseClient):
 
     def get_dir(self) -> requests.Response:
         service_url = ENDPOINTS.get('directories')
-        full_url = self.base_url + service_url
+        full_url = self._build_url(service_url)
         return self._make_request(method='GET', url=full_url)
 
     def delete_survey(self, survey_id: str) -> requests.Response:
         service_url = ENDPOINTS.get('get_survey').format(survey_id)
-        full_url = self.base_url + service_url
+        full_url = self._build_url(service_url)
 
         print(f'Deleting survey {survey_id}')
         response = self._make_request('DELETE', url=full_url)

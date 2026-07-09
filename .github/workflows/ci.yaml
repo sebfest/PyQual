@@ -1,32 +1,45 @@
-name: pyqual_testing
+name: CI
 
 on:
   push:
     branches:
       - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  update:
-    name: Test
+  test:
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ "3.10", "3.11" ]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v7
+
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
 
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install .
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
 
       - name: Run tests
-        run: python -m unittest discover src/tests/
+        run: uv run python -m unittest discover tests -v
+
+      - name: Build package
+        run: uv build

@@ -13,3 +13,4 @@ dist/
 pip-wheel-metadata/
 .eggs
 /htmlcov/
+.coverage
