@@ -31,7 +31,7 @@ class BaseManager:
             """
         self._data_center = data_center
         self._client = QualtricsManageSurveyClient(
-            token=os.environ['QUALTRICS_TOKEN'],
+            token=os.environ.get('QUALTRICS_TOKEN', ''),
             data_center=self._data_center
         )
 
